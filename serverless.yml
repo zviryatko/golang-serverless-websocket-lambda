@@ -1,0 +1,68 @@
+service: golang-ws-test
+# app and org for use with dashboard.serverless.com
+#app: your-app-name
+#org: your-org-name
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: go1.x
+  region: us-east-1
+  stage: dev
+  environment:
+    API_URL:
+      !Join
+      - ''
+      - - 'https://'
+        - !GetAtt WebsocketsApi.ApiId
+        - '.execute-api.'
+        - ${self:provider.region}
+        - '.amazonaws.com/'
+        - ${self:provider.stage}
+    DYNAMODB_TABLE: ${self:service}-${self:provider.stage}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+package:
+  patterns:
+    - '!./**'
+    - ./bin/**
+
+functions:
+  app:
+    handler: bin/app
+    events:
+      - websocket:
+          route: $connect
+      - websocket:
+          route: $disconnect
+      - websocket:
+          route: $default
+
+resources:
+  Resources:
+    ConnectionsDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: connectionId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connectionId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
